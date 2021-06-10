@@ -5,6 +5,7 @@ timeout=10
 tmp="$(mktemp -d)"
 checkfile="${1:-checks.csv}"
 incidentsfile="${2:-incidents.txt}"
+maintenancefile="${3:-maintenance-windows.csv}"
 failonoutage=false
 useragent="User-Agent: Mozilla/5.0 (X11; Linux x86_64; Debian) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.88 Safari/537.36"
 
@@ -19,11 +20,37 @@ get_element(){
     echo "${2}" | awk -v col="${1}" -F',' '{gsub(/^[ \t]+|[ \t]+$/, "", $col); print $col}'
 }
 
+is_maintenancewindow(){
+    m_name="${1}"
+    m_line=$(grep "^${m_name}," ${maintenancefile} | head -1)
+
+    if [ -z "$m_line" ]; then
+        return 1
+    fi
+
+    curr_date=$(date +%s)
+
+    m_start=$(date --date="$(get_element 2 "${m_line}")" +%s)
+    m_end=$(date --date="$(get_element 3 "${m_line}")" +%s)
+
+    if [ $curr_date -gt $m_start ] && [ $curr_date -lt $m_end ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+
 check(){
     ctype="${1}"
     host="${2}"
     name="${3}"
     expectedcode="${4}"
+
+    if is_maintenancewindow "${name}"; then
+        echo "Ongoing Maintenance" > "${tmp}/kk/${name}.status"
+        return 1
+    fi
 
     IPv="$(echo "${ctype}" | grep -o '[46]$')"
     case "${ctype}" in
@@ -55,7 +82,7 @@ check(){
 command_exists 'curl'
 command_exists 'nc'
 command_exists 'ping'
-mkdir -p "${tmp}/ok" "${tmp}/ko" || exit 1
+mkdir -p "${tmp}/ok" "${tmp}/ko" "${tmp}/kk" || exit 1
 
 while IFS="$(printf '\n')" read -r line; do
     ctype="$(get_element 1 "${line}")"
@@ -75,9 +102,11 @@ li { list-style: none; margin-bottom: 2px; padding: 5px; border-bottom: 1px soli
 .container { max-width: 600px; width: 100%; margin: 15px auto; }
 .panel { text-align: center; padding: 10px; border: 0px; border-radius: 5px; }
 .failed-bg  { color: white; background-color: #E25D6A; }
+.maintenance-bg { color: #333; background-color: #CB0; }
 .success-bg { color: white; background-color: #52B86A; }
 .failed  { color: #E25D6A; }
 .success { color: #52B86A; }
+.maintenance { color: #CB0; }
 .small { font-size: 80%; }
 .status { float: right; }
 </style></head>
@@ -86,8 +115,11 @@ li { list-style: none; margin-bottom: 2px; padding: 5px; border-bottom: 1px soli
 <h1>Global status</h1>
 EOF
 outagenb="$(find "${tmp}/ko" -mindepth 1 | grep -c 'status$')"
+maintenancenb="$(find "${tmp}/kk" -mindepth 1 | grep -c 'status$')"
 if [ "${outagenb}" -ne 0 ]; then
     echo "<ul><li class='panel failed-bg'>${outagenb} Outage(s)</li></ul>"
+elif [ "${maintenancenb}" -ne 0 ]; then
+    echo "<ul><li class='panel maintenance-bg'>${maintenancenb} Ongoing Maintenance(s)</li></ul>"
 else
     echo "<ul><li class='panel success-bg'>All Systems Operational</li></ul>"
 fi
@@ -101,6 +133,11 @@ for file in "${tmp}/ko/"*.status; do
     status="$(cat "${file}")"
     echo "<li>${name} <span class='small failed'>(${status})</span><span class='status failed'>Disrupted</span></li>"
 done
+for file in "${tmp}/kk/"*.status; do
+    [ -e "${file}" ] || continue
+    name="$(basename "${file}" | sed 's,.status$,,')"
+    echo "<li>${name} <span class='status maintenance'>Maintenance</span></li>"
+done
 for file in "${tmp}/ok/"*.status; do
     [ -e "${file}" ] || continue
     name="$(basename "${file}" | sed 's,.status$,,')"
@@ -110,6 +147,15 @@ cat << EOF
 </ul>
 <p class=small> Last check: $(date -I'seconds')</p>
 EOF
+if [ -f "${maintenancefile}" ]; then
+    echo '<h1>Planned Maintenance Windows</h1>'
+    if [ -s "${maintenancefile}" ]; then
+        m_name=""$(get_element 1 "${line}")""
+        sed 's|\([^,]*\),[[:space:]]*\([0-9\/\: ]*\),[[:space:]]*\([0-9\/\: ]*\)|<p><strong>\1</strong></p><p> \2 - \3</p>|' "${maintenancefile}"
+    else
+        echo '<p>No maintenance windows planned.)</p>'
+    fi
+fi
 if [ -f "${incidentsfile}" ]; then
     echo '<h1>Incidents</h1>'
     if [ -s "${incidentsfile}" ]; then

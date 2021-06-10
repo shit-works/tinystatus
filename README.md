@@ -1,6 +1,6 @@
 # Tinystatus
 
-tinystatus generate an html status page via shell script.
+tinystatus generates an html status page via shell script.
 
 ## Features
 
@@ -11,6 +11,7 @@ tinystatus generate an html status page via shell script.
 * Easy configuration and customisation
 * Tiny (~1kb) optimized result page
 * Incident history (manual)
+* Maintenance windows (manual)
 
 ## Demo
 
@@ -23,10 +24,13 @@ To install tinystatus:
 * Clone the repository and go to the created directory
 * Edit the checks file `checks.csv`
 * To add incidents or maintenance, edit `incidents.txt`
+* To add maintenance windows, edit `maintenance-windows.csv`
 * Generate status page `./tinystatus > index.html`
 * Serve the page with your favorite web server
 
 ## Configuration file
+
+### Checks
 
 The syntax of `checks.csv` file is:
 ```
@@ -41,3 +45,11 @@ Command can be:
 There are also `http4`, `http6`, `ping4`, `ping6`, `port4`, `port6` for IPv4 or IPv6 only check.  
 Note: `port4` and `port6` require OpenBSD `nc` binary.
 
+### Maintenance Windows
+
+If the file `maintenance-windows.csv` exists, checks for matching `Status Text` entries will be skipped in the corresponding timeframes.
+
+The syntax of `maintenance-windows.csv` file is:
+```
+Service Text, Maintenance Start, Maintenance End
+```
