@@ -47,9 +47,11 @@ check(){
     name="${3}"
     expectedcode="${4}"
 
-    if is_maintenancewindow "${name}"; then
-        echo "Ongoing Maintenance" > "${tmp}/kk/${name}.status"
-        return 1
+    if [ -f "${maintenancefile}" ]; then
+        if is_maintenancewindow "${name}"; then
+            echo "Ongoing Maintenance" > "${tmp}/kk/${name}.status"
+            return 1
+        fi
     fi
 
     IPv="$(echo "${ctype}" | grep -o '[46]$')"
@@ -173,4 +175,3 @@ rm -r "${tmp}" 2>/dev/null
 if [ "${failonoutage}" = true ]; then
     exit "${outagenb}"
 fi
-
